@@ -1,4 +1,5 @@
-import { useState, ChangeEvent } from "react";
+import { useState, ChangeEvent, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import Navbar from "@/components/Navbar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -17,14 +18,37 @@ import { toast } from "@/components/ui/use-toast";
 import { Upload as UploadIcon, Folder, X, Image, Check } from "lucide-react";
 import { PhotoProps } from "@/components/PhotoCard";
 
+// Создаем локальное хранилище для фотографий
+const PHOTOS_STORAGE_KEY = 'portfolio-photos';
+
 const Upload = () => {
+  const navigate = useNavigate();
   const [files, setFiles] = useState<File[]>([]);
   const [previews, setPreviews] = useState<string[]>([]);
   const [selectedFolder, setSelectedFolder] = useState("Общие");
   const [isUploading, setIsUploading] = useState(false);
+  const [customFolderName, setCustomFolderName] = useState("");
+  const [showCustomInput, setShowCustomInput] = useState(false);
 
   // Имитация существующих папок
-  const folders = ["Общие", "Природа", "Портреты", "Город", "Макро"];
+  const [folders, setFolders] = useState<string[]>(["Общие", "Природа", "Портреты", "Город", "Макро"]);
+
+  // Загружаем существующие папки из хранилища
+  useEffect(() => {
+    try {
+      const savedPhotos = localStorage.getItem(PHOTOS_STORAGE_KEY);
+      if (savedPhotos) {
+        const photos: PhotoProps[] = JSON.parse(savedPhotos);
+        const existingFolders = Array.from(new Set(photos.map(photo => photo.folder)));
+        setFolders(prevFolders => {
+          const allFolders = [...prevFolders, ...existingFolders];
+          return Array.from(new Set(allFolders));
+        });
+      }
+    } catch (error) {
+      console.error("Ошибка при загрузке папок:", error);
+    }
+  }, []);
 
   const handleFileChange = (e: ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {
@@ -49,6 +73,25 @@ const Upload = () => {
     setPreviews(previews.filter((_, i) => i !== index));
   };
 
+  const handleFolderChange = (value: string) => {
+    if (value === "новая_папка") {
+      setShowCustomInput(true);
+    } else {
+      setShowCustomInput(false);
+      setSelectedFolder(value);
+    }
+  };
+
+  const addCustomFolder = () => {
+    if (customFolderName.trim()) {
+      // Добавляем новую папку в список
+      setFolders(prev => [...prev, customFolderName]);
+      setSelectedFolder(customFolderName);
+      setCustomFolderName("");
+      setShowCustomInput(false);
+    }
+  };
+
   const handleUpload = () => {
     if (files.length === 0) {
       toast({
@@ -61,19 +104,35 @@ const Upload = () => {
 
     setIsUploading(true);
     
-    // Имитация загрузки с задержкой
-    setTimeout(() => {
-      const uploadedPhotos: PhotoProps[] = files.map((file, index) => ({
-        id: Date.now().toString() + index,
-        name: file.name.split('.')[0], // Автоматически получаем имя файла без расширения
-        url: previews[index],
-        folder: selectedFolder,
-        date: new Date().toISOString().split('T')[0]
-      }));
+    // Загружаем существующие фотографии
+    let existingPhotos: PhotoProps[] = [];
+    try {
+      const savedPhotos = localStorage.getItem(PHOTOS_STORAGE_KEY);
+      if (savedPhotos) {
+        existingPhotos = JSON.parse(savedPhotos);
+      }
+    } catch (error) {
+      console.error("Ошибка при загрузке существующих фотографий:", error);
+    }
 
-      // В настоящем приложении здесь был бы API запрос
-      console.log("Загруженные фотографии:", uploadedPhotos);
-      
+    // Создаем новые записи о фотографиях
+    const uploadedPhotos: PhotoProps[] = files.map((file, index) => ({
+      id: Date.now().toString() + index,
+      name: file.name.split('.')[0], // Автоматически получаем имя файла без расширения
+      url: previews[index],
+      folder: selectedFolder,
+      date: new Date().toISOString().split('T')[0],
+      aspectRatio: getAspectRatio(file.name) // Добавляем информацию о соотношении сторон
+    }));
+
+    // Объединяем существующие и новые фотографии
+    const allPhotos = [...existingPhotos, ...uploadedPhotos];
+    
+    // Сохраняем в локальное хранилище
+    localStorage.setItem(PHOTOS_STORAGE_KEY, JSON.stringify(allPhotos));
+    
+    // Имитируем задержку загрузки
+    setTimeout(() => {
       toast({
         title: "Успешно загружено",
         description: `${files.length} фотографий загружено в папку "${selectedFolder}".`,
@@ -82,7 +141,21 @@ const Upload = () => {
       setIsUploading(false);
       setFiles([]);
       setPreviews([]);
+
+      // Перенаправляем пользователя в галерею
+      navigate("/portfolio");
     }, 1500);
+  };
+
+  // Функция для определения соотношения сторон фотографии
+  // В реальном приложении эта информация могла бы извлекаться из метаданных изображения
+  const getAspectRatio = (filename: string): string => {
+    // Простая имитация определения размера по имени файла
+    if (filename.toLowerCase().includes("10x15")) return "portrait"; // 2:3
+    if (filename.toLowerCase().includes("15x10")) return "landscape"; // 3:2
+    
+    // По умолчанию считаем, что фото квадратное
+    return Math.random() > 0.5 ? "landscape" : "portrait";
   };
 
   return (
@@ -98,24 +171,44 @@ const Upload = () => {
                 <label className="block text-sm font-medium mb-2">
                   Выберите папку
                 </label>
-                <Select 
-                  value={selectedFolder} 
-                  onValueChange={setSelectedFolder}
-                >
-                  <SelectTrigger className="w-full">
-                    <SelectValue placeholder="Выберите папку" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {folders.map(folder => (
-                      <SelectItem key={folder} value={folder}>
-                        <div className="flex items-center">
+                {showCustomInput ? (
+                  <div className="flex gap-2">
+                    <Input
+                      value={customFolderName}
+                      onChange={(e) => setCustomFolderName(e.target.value)}
+                      placeholder="Название новой папки"
+                      className="flex-1"
+                    />
+                    <Button onClick={addCustomFolder} size="sm">
+                      <Check className="h-4 w-4 mr-1" /> Добавить
+                    </Button>
+                  </div>
+                ) : (
+                  <Select 
+                    value={selectedFolder} 
+                    onValueChange={handleFolderChange}
+                  >
+                    <SelectTrigger className="w-full">
+                      <SelectValue placeholder="Выберите папку" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {folders.map(folder => (
+                        <SelectItem key={folder} value={folder}>
+                          <div className="flex items-center">
+                            <Folder className="mr-2 h-4 w-4" />
+                            {folder}
+                          </div>
+                        </SelectItem>
+                      ))}
+                      <SelectItem value="новая_папка">
+                        <div className="flex items-center text-primary">
                           <Folder className="mr-2 h-4 w-4" />
-                          {folder}
+                          + Создать новую папку
                         </div>
                       </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                    </SelectContent>
+                  </Select>
+                )}
               </div>
               
               <div className="mt-6">
@@ -141,6 +234,9 @@ const Upload = () => {
                     </p>
                     <p className="text-xs text-muted-foreground">
                       Поддерживаются форматы JPG, PNG, WebP
+                    </p>
+                    <p className="text-xs text-muted-foreground mt-2">
+                      Фотографии 10×15 и 15×10 будут правильно отображены в галерее
                     </p>
                   </label>
                 </div>

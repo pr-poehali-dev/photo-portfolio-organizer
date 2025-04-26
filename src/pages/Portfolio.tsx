@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Navbar from "@/components/Navbar";
 import PhotoCard, { PhotoProps } from "@/components/PhotoCard";
 import { 
@@ -9,7 +9,7 @@ import {
 } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Folder, FolderPlus, Search } from "lucide-react";
+import { Folder, FolderPlus, Search, Heart, Archive, RefreshCw, Grid3X3, Grid2X2 } from "lucide-react";
 import { 
   Dialog,
   DialogContent,
@@ -20,6 +20,10 @@ import {
   DialogClose
 } from "@/components/ui/dialog";
 import { toast } from "@/components/ui/use-toast";
+import { useNavigate } from "react-router-dom";
+
+// Ключ для хранения фотографий
+const PHOTOS_STORAGE_KEY = 'portfolio-photos';
 
 // Демо-данные для примера
 const demoPhotos: PhotoProps[] = [
@@ -28,69 +32,108 @@ const demoPhotos: PhotoProps[] = [
     name: "Закат на море",
     url: "https://images.unsplash.com/photo-1500964757637-c85e8a162699",
     folder: "Природа",
-    date: "2025-04-26"
+    date: "2025-04-26",
+    aspectRatio: "landscape" // 15x10
   },
   {
     id: "2",
     name: "Горный пейзаж",
     url: "https://images.unsplash.com/photo-1469474968028-56623f02e42e",
     folder: "Природа",
-    date: "2025-04-25"
+    date: "2025-04-25",
+    aspectRatio: "landscape" // 15x10
   },
   {
     id: "3",
     name: "Портрет девушки",
     url: "https://images.unsplash.com/photo-1544005313-94ddf0286df2",
     folder: "Портреты",
-    date: "2025-04-24"
+    date: "2025-04-24",
+    aspectRatio: "portrait" // 10x15
   },
   {
     id: "4",
     name: "Городской пейзаж",
     url: "https://images.unsplash.com/photo-1477959858617-67f85cf4f1df",
     folder: "Город",
-    date: "2025-04-23"
+    date: "2025-04-23",
+    aspectRatio: "landscape" // 15x10
   },
   {
     id: "5",
     name: "Архитектура",
     url: "https://images.unsplash.com/photo-1487958449943-2429e8be8625",
     folder: "Город",
-    date: "2025-04-22"
+    date: "2025-04-22",
+    aspectRatio: "portrait" // 10x15
   },
   {
     id: "6",
     name: "Макрофотография",
     url: "https://images.unsplash.com/photo-1534349762230-e0cadf78f5da",
     folder: "Макро",
-    date: "2025-04-21"
+    date: "2025-04-21",
+    aspectRatio: "square" // 1:1
   }
 ];
 
 const Portfolio = () => {
-  const [photos, setPhotos] = useState<PhotoProps[]>(demoPhotos);
+  const navigate = useNavigate();
+  const [photos, setPhotos] = useState<PhotoProps[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [newFolderName, setNewFolderName] = useState("");
   const [currentTab, setCurrentTab] = useState("all");
+  const [gridSize, setGridSize] = useState<"default" | "large">("default");
+
+  // Загружаем фотографии при монтировании компонента
+  useEffect(() => {
+    loadPhotos();
+  }, []);
+
+  // Функция загрузки фотографий из localStorage
+  const loadPhotos = () => {
+    try {
+      const savedPhotos = localStorage.getItem(PHOTOS_STORAGE_KEY);
+      if (savedPhotos) {
+        const parsedPhotos = JSON.parse(savedPhotos);
+        setPhotos(parsedPhotos);
+      } else {
+        // Если в localStorage нет фотографий, используем демо-данные
+        setPhotos(demoPhotos);
+        // И сохраняем их для дальнейшего использования
+        localStorage.setItem(PHOTOS_STORAGE_KEY, JSON.stringify(demoPhotos));
+      }
+    } catch (error) {
+      console.error("Ошибка при загрузке фотографий:", error);
+      setPhotos(demoPhotos);
+    }
+  };
 
   // Получаем уникальные папки из фотографий
-  const folders = ["Все", ...Array.from(new Set(photos.map(photo => photo.folder)))];
+  const folders = Array.from(new Set(photos.map(photo => photo.folder)));
 
   // Фильтруем фотографии по поиску и выбранной папке
   const filteredPhotos = photos.filter(photo => {
     const matchesSearch = photo.name.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesFolder = currentTab === "all" || photo.folder.toLowerCase() === currentTab.toLowerCase();
+    const matchesFolder = currentTab === "all" || 
+                          (currentTab === "favorites" && photo.folder === "Избранное") ||
+                          (currentTab === "archive" && photo.folder === "Архив") ||
+                          photo.folder.toLowerCase() === currentTab.toLowerCase();
     return matchesSearch && matchesFolder;
   });
 
   const handleDeletePhoto = (id: string) => {
-    setPhotos(photos.filter(photo => photo.id !== id));
+    const updatedPhotos = photos.filter(photo => photo.id !== id);
+    setPhotos(updatedPhotos);
+    localStorage.setItem(PHOTOS_STORAGE_KEY, JSON.stringify(updatedPhotos));
   };
 
   const handleMovePhoto = (id: string, folder: string) => {
-    setPhotos(photos.map(photo => 
+    const updatedPhotos = photos.map(photo => 
       photo.id === id ? { ...photo, folder } : photo
-    ));
+    );
+    setPhotos(updatedPhotos);
+    localStorage.setItem(PHOTOS_STORAGE_KEY, JSON.stringify(updatedPhotos));
   };
 
   const handleCreateFolder = () => {
@@ -99,8 +142,13 @@ const Portfolio = () => {
         title: "Папка создана",
         description: `Папка "${newFolderName}" успешно создана.`
       });
+      // В реальном приложении здесь бы обновлялся список папок на сервере
       setNewFolderName("");
     }
+  };
+
+  const handleAddPhotos = () => {
+    navigate("/upload");
   };
 
   return (
@@ -121,35 +169,72 @@ const Portfolio = () => {
               />
             </div>
             
-            <Dialog>
-              <DialogTrigger asChild>
-                <Button variant="outline">
-                  <FolderPlus className="mr-2 h-4 w-4" />
-                  Новая папка
-                </Button>
-              </DialogTrigger>
-              <DialogContent>
-                <DialogHeader>
-                  <DialogTitle>Создать новую папку</DialogTitle>
-                </DialogHeader>
-                <div className="py-4">
-                  <Input
-                    placeholder="Название папки"
-                    value={newFolderName}
-                    onChange={(e) => setNewFolderName(e.target.value)}
-                  />
-                </div>
-                <DialogFooter>
-                  <DialogClose asChild>
-                    <Button type="button" variant="outline">Отмена</Button>
-                  </DialogClose>
-                  <DialogClose asChild>
-                    <Button onClick={handleCreateFolder}>Создать</Button>
-                  </DialogClose>
-                </DialogFooter>
-              </DialogContent>
-            </Dialog>
+            <div className="flex gap-2">
+              <Button variant="outline" onClick={handleAddPhotos}>
+                <FolderPlus className="mr-2 h-4 w-4" />
+                Загрузить фото
+              </Button>
+              
+              <Dialog>
+                <DialogTrigger asChild>
+                  <Button variant="outline">
+                    <Folder className="mr-2 h-4 w-4" />
+                    Новая папка
+                  </Button>
+                </DialogTrigger>
+                <DialogContent>
+                  <DialogHeader>
+                    <DialogTitle>Создать новую папку</DialogTitle>
+                  </DialogHeader>
+                  <div className="py-4">
+                    <Input
+                      placeholder="Название папки"
+                      value={newFolderName}
+                      onChange={(e) => setNewFolderName(e.target.value)}
+                    />
+                  </div>
+                  <DialogFooter>
+                    <DialogClose asChild>
+                      <Button type="button" variant="outline">Отмена</Button>
+                    </DialogClose>
+                    <DialogClose asChild>
+                      <Button onClick={handleCreateFolder}>Создать</Button>
+                    </DialogClose>
+                  </DialogFooter>
+                </DialogContent>
+              </Dialog>
+            </div>
           </div>
+        </div>
+
+        <div className="flex justify-between items-center mb-4">
+          <div className="flex items-center gap-2">
+            <Button 
+              variant={gridSize === "default" ? "secondary" : "outline"} 
+              size="icon" 
+              onClick={() => setGridSize("default")}
+              className="w-8 h-8"
+            >
+              <Grid3X3 className="h-4 w-4" />
+            </Button>
+            <Button 
+              variant={gridSize === "large" ? "secondary" : "outline"} 
+              size="icon" 
+              onClick={() => setGridSize("large")}
+              className="w-8 h-8"
+            >
+              <Grid2X2 className="h-4 w-4" />
+            </Button>
+          </div>
+          <Button 
+            variant="ghost" 
+            size="sm" 
+            onClick={loadPhotos}
+            className="text-xs flex items-center"
+          >
+            <RefreshCw className="h-3 w-3 mr-1" />
+            Обновить
+          </Button>
         </div>
 
         <Tabs 
@@ -157,15 +242,29 @@ const Portfolio = () => {
           onValueChange={setCurrentTab}
           className="w-full"
         >
-          <div className="border-b mb-6">
-            <TabsList className="bg-transparent h-auto p-0 mb-[-1px]">
+          <div className="border-b mb-6 overflow-x-auto">
+            <TabsList className="bg-transparent h-auto p-0 mb-[-1px] flex">
               <TabsTrigger 
                 value="all" 
                 className="data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none px-4 py-2"
               >
                 Все фото
               </TabsTrigger>
-              {folders.filter(folder => folder !== "Все").map((folder) => (
+              <TabsTrigger 
+                value="favorites" 
+                className="data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none px-4 py-2 flex items-center"
+              >
+                <Heart className="h-4 w-4 mr-1" />
+                Избранное
+              </TabsTrigger>
+              <TabsTrigger 
+                value="archive" 
+                className="data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none px-4 py-2 flex items-center"
+              >
+                <Archive className="h-4 w-4 mr-1" />
+                Архив
+              </TabsTrigger>
+              {folders.filter(folder => !["Избранное", "Архив"].includes(folder)).map((folder) => (
                 <TabsTrigger
                   key={folder}
                   value={folder.toLowerCase()}
@@ -178,8 +277,8 @@ const Portfolio = () => {
             </TabsList>
           </div>
 
-          <TabsContent value="all" className="mt-0">
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
+          <TabsContent value={currentTab} className="mt-0">
+            <div className={`grid ${gridSize === "large" ? "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3" : "grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5"} gap-6`}>
               {filteredPhotos.length > 0 ? (
                 filteredPhotos.map((photo) => (
                   <PhotoCard 
@@ -187,36 +286,20 @@ const Portfolio = () => {
                     photo={photo} 
                     onDelete={handleDeletePhoto}
                     onMove={handleMovePhoto}
+                    folders={folders}
                   />
                 ))
               ) : (
-                <div className="col-span-full text-center py-12">
-                  <p className="text-muted-foreground">Фотографии не найдены</p>
+                <div className="col-span-full flex flex-col items-center py-16">
+                  <p className="text-muted-foreground mb-4">Фотографии не найдены</p>
+                  <Button onClick={handleAddPhotos}>
+                    <FolderPlus className="mr-2 h-4 w-4" />
+                    Загрузить фотографии
+                  </Button>
                 </div>
               )}
             </div>
           </TabsContent>
-
-          {folders.filter(folder => folder !== "Все").map((folder) => (
-            <TabsContent key={folder} value={folder.toLowerCase()} className="mt-0">
-              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
-                {filteredPhotos.length > 0 ? (
-                  filteredPhotos.map((photo) => (
-                    <PhotoCard 
-                      key={photo.id} 
-                      photo={photo}
-                      onDelete={handleDeletePhoto}
-                      onMove={handleMovePhoto}
-                    />
-                  ))
-                ) : (
-                  <div className="col-span-full text-center py-12">
-                    <p className="text-muted-foreground">Фотографии не найдены</p>
-                  </div>
-                )}
-              </div>
-            </TabsContent>
-          ))}
         </Tabs>
       </div>
     </div>
