@@ -9,7 +9,7 @@ import {
 } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Folder, FolderPlus, Search, Heart, Archive, RefreshCw, Grid3X3, Grid2X2 } from "lucide-react";
+import { Folder, FolderPlus, Search, Heart, Archive, RefreshCw, Grid3X3, Grid2X2, Trash2 } from "lucide-react";
 import { 
   Dialog,
   DialogContent,
@@ -17,7 +17,8 @@ import {
   DialogTitle,
   DialogTrigger,
   DialogFooter,
-  DialogClose
+  DialogClose,
+  DialogDescription
 } from "@/components/ui/dialog";
 import { toast } from "@/components/ui/use-toast";
 import { useNavigate } from "react-router-dom";
@@ -57,7 +58,7 @@ const demoPhotos: PhotoProps[] = [
     url: "https://images.unsplash.com/photo-1477959858617-67f85cf4f1df",
     folder: "Город",
     date: "2025-04-23",
-    aspectRatio: "landscape" // 15x10
+    aspectRatio: "wide" // 16:9
   },
   {
     id: "5",
@@ -74,6 +75,30 @@ const demoPhotos: PhotoProps[] = [
     folder: "Макро",
     date: "2025-04-21",
     aspectRatio: "square" // 1:1
+  },
+  {
+    id: "7",
+    name: "Панорама города",
+    url: "https://images.unsplash.com/photo-1496588152823-86ff7695e68f",
+    folder: "Город",
+    date: "2025-04-20",
+    aspectRatio: "panorama" // 3:1
+  },
+  {
+    id: "8",
+    name: "Кинематографический пейзаж",
+    url: "https://images.unsplash.com/photo-1516298773066-c48f8e9bd92b",
+    folder: "Природа",
+    date: "2025-04-19",
+    aspectRatio: "cinema" // 21:9
+  },
+  {
+    id: "9",
+    name: "Моментальное фото",
+    url: "https://images.unsplash.com/photo-1465101162946-4377e57745c3",
+    folder: "Портреты",
+    date: "2025-04-18",
+    aspectRatio: "instant" // 5:4
   }
 ];
 
@@ -83,7 +108,8 @@ const Portfolio = () => {
   const [searchQuery, setSearchQuery] = useState("");
   const [newFolderName, setNewFolderName] = useState("");
   const [currentTab, setCurrentTab] = useState("all");
-  const [gridSize, setGridSize] = useState<"default" | "large">("default");
+  const [gridSize, setGridSize] = useState<"default" | "large" | "compact">("default");
+  const [isDeleteAllOpen, setIsDeleteAllOpen] = useState(false);
 
   // Загружаем фотографии при монтировании компонента
   useEffect(() => {
@@ -114,7 +140,8 @@ const Portfolio = () => {
 
   // Фильтруем фотографии по поиску и выбранной папке
   const filteredPhotos = photos.filter(photo => {
-    const matchesSearch = photo.name.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesSearch = photo.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
+                          photo.folder.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesFolder = currentTab === "all" || 
                           (currentTab === "favorites" && photo.folder === "Избранное") ||
                           (currentTab === "archive" && photo.folder === "Архив") ||
@@ -126,6 +153,28 @@ const Portfolio = () => {
     const updatedPhotos = photos.filter(photo => photo.id !== id);
     setPhotos(updatedPhotos);
     localStorage.setItem(PHOTOS_STORAGE_KEY, JSON.stringify(updatedPhotos));
+  };
+
+  const handleDeleteAllPhotos = () => {
+    const photosToKeep = currentTab === "all" 
+      ? [] 
+      : photos.filter(photo => {
+          if (currentTab === "favorites") return photo.folder !== "Избранное";
+          if (currentTab === "archive") return photo.folder !== "Архив";
+          return photo.folder.toLowerCase() !== currentTab.toLowerCase();
+        });
+    
+    setPhotos(photosToKeep);
+    localStorage.setItem(PHOTOS_STORAGE_KEY, JSON.stringify(photosToKeep));
+    
+    toast({
+      title: "Фотографии удалены",
+      description: currentTab === "all" 
+        ? "Все фотографии были удалены" 
+        : `Все фотографии в папке "${currentTab === "favorites" ? "Избранное" : currentTab === "archive" ? "Архив" : currentTab}" были удалены`
+    });
+    
+    setIsDeleteAllOpen(false);
   };
 
   const handleMovePhoto = (id: string, folder: string) => {
@@ -142,7 +191,6 @@ const Portfolio = () => {
         title: "Папка создана",
         description: `Папка "${newFolderName}" успешно создана.`
       });
-      // В реальном приложении здесь бы обновлялся список папок на сервере
       setNewFolderName("");
     }
   };
@@ -151,13 +199,25 @@ const Portfolio = () => {
     navigate("/upload");
   };
 
+  // Определяем класс для сетки в зависимости от выбранного размера
+  const getGridClass = () => {
+    switch(gridSize) {
+      case 'compact':
+        return "grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 gap-2";
+      case 'large':
+        return "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4";
+      default: // default
+        return "grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3";
+    }
+  };
+
   return (
     <div className="min-h-screen flex flex-col bg-background">
       <Navbar />
-      <div className="flex-1 container py-8 px-4 max-w-7xl mx-auto">
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
-          <h1 className="text-3xl font-bold">Моё портфолио</h1>
-          <div className="flex flex-col sm:flex-row gap-3 w-full md:w-auto">
+      <div className="flex-1 container py-6 px-4 max-w-7xl mx-auto">
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-4 gap-3">
+          <h1 className="text-2xl font-bold">Моё портфолио</h1>
+          <div className="flex flex-col sm:flex-row gap-2 w-full md:w-auto">
             <div className="relative w-full sm:w-64">
               <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
               <Input
@@ -170,14 +230,14 @@ const Portfolio = () => {
             </div>
             
             <div className="flex gap-2">
-              <Button variant="outline" onClick={handleAddPhotos}>
+              <Button variant="outline" onClick={handleAddPhotos} size="sm">
                 <FolderPlus className="mr-2 h-4 w-4" />
                 Загрузить фото
               </Button>
               
               <Dialog>
                 <DialogTrigger asChild>
-                  <Button variant="outline">
+                  <Button variant="outline" size="sm">
                     <Folder className="mr-2 h-4 w-4" />
                     Новая папка
                   </Button>
@@ -207,42 +267,98 @@ const Portfolio = () => {
           </div>
         </div>
 
-        <div className="flex justify-between items-center mb-4">
+        <div className="flex justify-between items-center mb-3">
           <div className="flex items-center gap-2">
+            <Button 
+              variant={gridSize === "compact" ? "secondary" : "outline"} 
+              size="icon" 
+              onClick={() => setGridSize("compact")}
+              className="w-8 h-8"
+              title="Компактный вид"
+            >
+              <Grid3X3 className="h-4 w-4" />
+            </Button>
             <Button 
               variant={gridSize === "default" ? "secondary" : "outline"} 
               size="icon" 
               onClick={() => setGridSize("default")}
               className="w-8 h-8"
+              title="Стандартный вид"
             >
-              <Grid3X3 className="h-4 w-4" />
+              <Grid2X2 className="h-4 w-4" />
             </Button>
             <Button 
               variant={gridSize === "large" ? "secondary" : "outline"} 
               size="icon" 
               onClick={() => setGridSize("large")}
               className="w-8 h-8"
+              title="Крупный вид"
             >
-              <Grid2X2 className="h-4 w-4" />
+              <div className="grid grid-cols-2 gap-0.5 w-4 h-4">
+                <div className="bg-current"></div>
+                <div className="bg-current"></div>
+              </div>
             </Button>
           </div>
-          <Button 
-            variant="ghost" 
-            size="sm" 
-            onClick={loadPhotos}
-            className="text-xs flex items-center"
-          >
-            <RefreshCw className="h-3 w-3 mr-1" />
-            Обновить
-          </Button>
+          <div className="flex gap-2">
+            <Button 
+              variant="ghost" 
+              size="sm" 
+              onClick={loadPhotos}
+              className="text-xs flex items-center"
+            >
+              <RefreshCw className="h-3 w-3 mr-1" />
+              Обновить
+            </Button>
+            
+            {filteredPhotos.length > 0 && (
+              <Dialog open={isDeleteAllOpen} onOpenChange={setIsDeleteAllOpen}>
+                <DialogTrigger asChild>
+                  <Button 
+                    variant="outline" 
+                    size="sm"
+                    className="text-xs flex items-center text-destructive"
+                  >
+                    <Trash2 className="h-3 w-3 mr-1" />
+                    Удалить все
+                  </Button>
+                </DialogTrigger>
+                <DialogContent>
+                  <DialogHeader>
+                    <DialogTitle>Удалить все фотографии?</DialogTitle>
+                    <DialogDescription>
+                      {currentTab === "all" 
+                        ? "Вы уверены, что хотите удалить все фотографии из галереи? Это действие нельзя отменить." 
+                        : `Вы уверены, что хотите удалить все фотографии из папки "${currentTab === "favorites" ? "Избранное" : currentTab === "archive" ? "Архив" : currentTab}"? Это действие нельзя отменить.`}
+                    </DialogDescription>
+                  </DialogHeader>
+                  <DialogFooter>
+                    <Button 
+                      variant="outline" 
+                      onClick={() => setIsDeleteAllOpen(false)}
+                    >
+                      Отмена
+                    </Button>
+                    <Button 
+                      variant="destructive" 
+                      onClick={handleDeleteAllPhotos}
+                    >
+                      Удалить
+                    </Button>
+                  </DialogFooter>
+                </DialogContent>
+              </Dialog>
+            )}
+          </div>
         </div>
 
         <Tabs 
           defaultValue="all" 
           onValueChange={setCurrentTab}
           className="w-full"
+          value={currentTab}
         >
-          <div className="border-b mb-6 overflow-x-auto">
+          <div className="border-b mb-4 overflow-x-auto">
             <TabsList className="bg-transparent h-auto p-0 mb-[-1px] flex">
               <TabsTrigger 
                 value="all" 
@@ -278,7 +394,7 @@ const Portfolio = () => {
           </div>
 
           <TabsContent value={currentTab} className="mt-0">
-            <div className={`grid ${gridSize === "large" ? "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3" : "grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5"} gap-6`}>
+            <div className={`grid ${getGridClass()}`}>
               {filteredPhotos.length > 0 ? (
                 filteredPhotos.map((photo) => (
                   <PhotoCard 
@@ -290,7 +406,7 @@ const Portfolio = () => {
                   />
                 ))
               ) : (
-                <div className="col-span-full flex flex-col items-center py-16">
+                <div className="col-span-full flex flex-col items-center py-12">
                   <p className="text-muted-foreground mb-4">Фотографии не найдены</p>
                   <Button onClick={handleAddPhotos}>
                     <FolderPlus className="mr-2 h-4 w-4" />
