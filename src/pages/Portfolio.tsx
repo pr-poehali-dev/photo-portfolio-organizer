@@ -9,7 +9,7 @@ import {
 } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Folder, FolderPlus, Search, Heart, Archive, RefreshCw, Grid3X3, Grid2X2, Trash2 } from "lucide-react";
+import { Folder, FolderPlus, Search, Heart, Archive, RefreshCw, Grid3X3, Grid2X2, Trash2, Info } from "lucide-react";
 import { 
   Dialog,
   DialogContent,
@@ -102,6 +102,13 @@ const demoPhotos: PhotoProps[] = [
   }
 ];
 
+// Статистика по фотографиям
+interface PhotoStats {
+  total: number;
+  byFolder: Record<string, number>;
+  byAspectRatio: Record<string, number>;
+}
+
 const Portfolio = () => {
   const navigate = useNavigate();
   const [photos, setPhotos] = useState<PhotoProps[]>([]);
@@ -110,6 +117,12 @@ const Portfolio = () => {
   const [currentTab, setCurrentTab] = useState("all");
   const [gridSize, setGridSize] = useState<"default" | "large" | "compact">("default");
   const [isDeleteAllOpen, setIsDeleteAllOpen] = useState(false);
+  const [photoStats, setPhotoStats] = useState<PhotoStats>({
+    total: 0,
+    byFolder: {},
+    byAspectRatio: {}
+  });
+  const [showStats, setShowStats] = useState(false);
 
   // Загружаем фотографии при монтировании компонента
   useEffect(() => {
@@ -123,16 +136,47 @@ const Portfolio = () => {
       if (savedPhotos) {
         const parsedPhotos = JSON.parse(savedPhotos);
         setPhotos(parsedPhotos);
+        calculateStats(parsedPhotos);
       } else {
         // Если в localStorage нет фотографий, используем демо-данные
         setPhotos(demoPhotos);
+        calculateStats(demoPhotos);
         // И сохраняем их для дальнейшего использования
         localStorage.setItem(PHOTOS_STORAGE_KEY, JSON.stringify(demoPhotos));
       }
     } catch (error) {
       console.error("Ошибка при загрузке фотографий:", error);
       setPhotos(demoPhotos);
+      calculateStats(demoPhotos);
     }
+  };
+
+  // Рассчитываем статистику по фотографиям
+  const calculateStats = (photosData: PhotoProps[]) => {
+    const stats: PhotoStats = {
+      total: photosData.length,
+      byFolder: {},
+      byAspectRatio: {}
+    };
+
+    photosData.forEach(photo => {
+      // Счётчик по папкам
+      if (stats.byFolder[photo.folder]) {
+        stats.byFolder[photo.folder]++;
+      } else {
+        stats.byFolder[photo.folder] = 1;
+      }
+
+      // Счётчик по соотношениям сторон
+      const aspectRatio = photo.aspectRatio || 'unknown';
+      if (stats.byAspectRatio[aspectRatio]) {
+        stats.byAspectRatio[aspectRatio]++;
+      } else {
+        stats.byAspectRatio[aspectRatio] = 1;
+      }
+    });
+
+    setPhotoStats(stats);
   };
 
   // Получаем уникальные папки из фотографий
@@ -153,6 +197,7 @@ const Portfolio = () => {
     const updatedPhotos = photos.filter(photo => photo.id !== id);
     setPhotos(updatedPhotos);
     localStorage.setItem(PHOTOS_STORAGE_KEY, JSON.stringify(updatedPhotos));
+    calculateStats(updatedPhotos);
   };
 
   const handleDeleteAllPhotos = () => {
@@ -166,6 +211,7 @@ const Portfolio = () => {
     
     setPhotos(photosToKeep);
     localStorage.setItem(PHOTOS_STORAGE_KEY, JSON.stringify(photosToKeep));
+    calculateStats(photosToKeep);
     
     toast({
       title: "Фотографии удалены",
@@ -183,6 +229,7 @@ const Portfolio = () => {
     );
     setPhotos(updatedPhotos);
     localStorage.setItem(PHOTOS_STORAGE_KEY, JSON.stringify(updatedPhotos));
+    calculateStats(updatedPhotos);
   };
 
   const handleCreateFolder = () => {
@@ -199,22 +246,36 @@ const Portfolio = () => {
     navigate("/upload");
   };
 
+  // Функция для отображения локализованного названия формата
+  const getFormatLabel = (format: string): string => {
+    switch(format) {
+      case 'portrait': return 'Портретный (10×15)';
+      case 'landscape': return 'Альбомный (15×10)';
+      case 'square': return 'Квадратный (1:1)';
+      case 'wide': return 'Широкоформатный (16:9)';
+      case 'panorama': return 'Панорама (3:1)';
+      case 'cinema': return 'Кинематографический (21:9)';
+      case 'instant': return 'Моментальное фото (5:4)';
+      default: return format;
+    }
+  };
+
   // Определяем класс для сетки в зависимости от выбранного размера
   const getGridClass = () => {
     switch(gridSize) {
       case 'compact':
-        return "grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 gap-2";
+        return "grid-cols-2 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-8 gap-1";
       case 'large':
         return "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4";
       default: // default
-        return "grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3";
+        return "grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-2";
     }
   };
 
   return (
     <div className="min-h-screen flex flex-col bg-background">
       <Navbar />
-      <div className="flex-1 container py-6 px-4 max-w-7xl mx-auto">
+      <div className="flex-1 container py-4 px-2 sm:py-6 sm:px-4 max-w-7xl mx-auto">
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-4 gap-3">
           <h1 className="text-2xl font-bold">Моё портфолио</h1>
           <div className="flex flex-col sm:flex-row gap-2 w-full md:w-auto">
@@ -304,6 +365,17 @@ const Portfolio = () => {
             <Button 
               variant="ghost" 
               size="sm" 
+              onClick={() => setShowStats(!showStats)}
+              className="text-xs flex items-center"
+              title="Статистика"
+            >
+              <Info className="h-3 w-3 mr-1" />
+              {photoStats.total} фото
+            </Button>
+            
+            <Button 
+              variant="ghost" 
+              size="sm" 
               onClick={loadPhotos}
               className="text-xs flex items-center"
             >
@@ -351,6 +423,36 @@ const Portfolio = () => {
             )}
           </div>
         </div>
+
+        {showStats && (
+          <div className="mb-4 p-3 bg-muted/30 rounded-lg text-sm">
+            <h3 className="font-medium mb-2">Статистика фотографий</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <h4 className="text-xs font-medium mb-1">По папкам:</h4>
+                <ul className="text-xs space-y-1">
+                  {Object.entries(photoStats.byFolder).map(([folder, count]) => (
+                    <li key={folder} className="flex justify-between">
+                      <span>{folder}</span>
+                      <span className="font-medium">{count}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+              <div>
+                <h4 className="text-xs font-medium mb-1">По форматам:</h4>
+                <ul className="text-xs space-y-1">
+                  {Object.entries(photoStats.byAspectRatio).map(([format, count]) => (
+                    <li key={format} className="flex justify-between">
+                      <span>{getFormatLabel(format)}</span>
+                      <span className="font-medium">{count}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+          </div>
+        )}
 
         <Tabs 
           defaultValue="all" 

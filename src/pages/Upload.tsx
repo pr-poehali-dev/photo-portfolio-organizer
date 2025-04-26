@@ -21,6 +21,10 @@ import { PhotoProps } from "@/components/PhotoCard";
 // Создаем локальное хранилище для фотографий
 const PHOTOS_STORAGE_KEY = 'portfolio-photos';
 
+// Максимальный размер изображения для хранения
+const MAX_IMAGE_WIDTH = 1200;
+const MAX_IMAGE_HEIGHT = 1200;
+
 const Upload = () => {
   const navigate = useNavigate();
   const [files, setFiles] = useState<File[]>([]);
@@ -30,6 +34,7 @@ const Upload = () => {
   const [customFolderName, setCustomFolderName] = useState("");
   const [showCustomInput, setShowCustomInput] = useState(false);
   const [selectedFormat, setSelectedFormat] = useState("auto");
+  const [uploadProgress, setUploadProgress] = useState(0);
 
   // Имитация существующих папок
   const [folders, setFolders] = useState<string[]>(["Общие", "Природа", "Портреты", "Город", "Макро"]);
@@ -108,7 +113,36 @@ const Upload = () => {
     }
   };
 
-  const handleUpload = () => {
+  // Функция для оптимизации изображения
+  const optimizeImage = (dataUrl: string): Promise<string> => {
+    return new Promise((resolve) => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        let width = img.width;
+        let height = img.height;
+        
+        // Уменьшаем размер, если превышает максимальный
+        if (width > MAX_IMAGE_WIDTH || height > MAX_IMAGE_HEIGHT) {
+          const ratio = Math.min(MAX_IMAGE_WIDTH / width, MAX_IMAGE_HEIGHT / height);
+          width *= ratio;
+          height *= ratio;
+        }
+        
+        canvas.width = width;
+        canvas.height = height;
+        
+        const ctx = canvas.getContext('2d');
+        ctx?.drawImage(img, 0, 0, width, height);
+        
+        // Сжимаем качество изображения
+        resolve(canvas.toDataURL('image/jpeg', 0.7));
+      };
+      img.src = dataUrl;
+    });
+  };
+
+  const handleUpload = async () => {
     if (files.length === 0) {
       toast({
         title: "Предупреждение",
@@ -119,36 +153,56 @@ const Upload = () => {
     }
 
     setIsUploading(true);
+    setUploadProgress(0);
     
-    // Загружаем существующие фотографии
-    let existingPhotos: PhotoProps[] = [];
     try {
+      // Загружаем существующие фотографии
+      let existingPhotos: PhotoProps[] = [];
       const savedPhotos = localStorage.getItem(PHOTOS_STORAGE_KEY);
       if (savedPhotos) {
         existingPhotos = JSON.parse(savedPhotos);
       }
-    } catch (error) {
-      console.error("Ошибка при загрузке существующих фотографий:", error);
-    }
 
-    // Создаем новые записи о фотографиях
-    const uploadedPhotos: PhotoProps[] = files.map((file, index) => ({
-      id: Date.now().toString() + index,
-      name: file.name.split('.')[0], // Автоматически получаем имя файла без расширения
-      url: previews[index],
-      folder: selectedFolder,
-      date: new Date().toISOString().split('T')[0],
-      aspectRatio: determineAspectRatio(file.name) // Добавляем информацию о соотношении сторон
-    }));
+      // Создаем новые записи о фотографиях, оптимизируя изображения
+      const uploadedPhotos: PhotoProps[] = [];
+      
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        const preview = previews[i];
+        
+        // Оптимизируем изображение
+        const optimizedImage = await optimizeImage(preview);
+        
+        // Обновляем прогресс
+        setUploadProgress(Math.round(((i + 1) / files.length) * 100));
+        
+        uploadedPhotos.push({
+          id: Date.now().toString() + i,
+          name: file.name.split('.')[0], // Автоматически получаем имя файла без расширения
+          url: optimizedImage,
+          folder: selectedFolder,
+          date: new Date().toISOString().split('T')[0],
+          aspectRatio: determineAspectRatio(file.name) // Добавляем информацию о соотношении сторон
+        });
+      }
 
-    // Объединяем существующие и новые фотографии
-    const allPhotos = [...existingPhotos, ...uploadedPhotos];
-    
-    // Сохраняем в локальное хранилище
-    localStorage.setItem(PHOTOS_STORAGE_KEY, JSON.stringify(allPhotos));
-    
-    // Имитируем задержку загрузки
-    setTimeout(() => {
+      // Объединяем существующие и новые фотографии
+      const allPhotos = [...existingPhotos, ...uploadedPhotos];
+      
+      // Сохраняем в локальное хранилище порциями, если много фотографий
+      // Удаляем старые фото, если их слишком много
+      if (allPhotos.length > 100) {
+        const photosToKeep = allPhotos.slice(-100);
+        localStorage.setItem(PHOTOS_STORAGE_KEY, JSON.stringify(photosToKeep));
+        toast({
+          title: "Внимание",
+          description: "Было сохранено только последние 100 фотографий из-за ограничений хранилища.",
+          variant: "warning"
+        });
+      } else {
+        localStorage.setItem(PHOTOS_STORAGE_KEY, JSON.stringify(allPhotos));
+      }
+      
       toast({
         title: "Успешно загружено",
         description: `${files.length} фотографий загружено в папку "${selectedFolder}".`,
@@ -157,10 +211,19 @@ const Upload = () => {
       setIsUploading(false);
       setFiles([]);
       setPreviews([]);
+      setUploadProgress(0);
 
       // Перенаправляем пользователя в галерею
       navigate("/portfolio");
-    }, 1000);
+    } catch (error) {
+      console.error("Ошибка при загрузке:", error);
+      toast({
+        title: "Ошибка при загрузке",
+        description: "Не удалось сохранить фотографии. Возможно, превышен лимит хранилища.",
+        variant: "destructive"
+      });
+      setIsUploading(false);
+    }
   };
 
   // Функция для определения соотношения сторон фотографии
@@ -329,6 +392,19 @@ const Upload = () => {
                 <p className="text-sm text-muted-foreground mb-3">
                   Целевая папка: <span className="font-medium text-foreground">{selectedFolder}</span>
                 </p>
+                
+                {isUploading && (
+                  <div className="w-full bg-muted rounded-full h-2.5 mb-2">
+                    <div 
+                      className="bg-primary h-2.5 rounded-full transition-all" 
+                      style={{ width: `${uploadProgress}%` }}
+                    ></div>
+                    <p className="text-xs text-muted-foreground mt-1 text-right">
+                      {uploadProgress}%
+                    </p>
+                  </div>
+                )}
+                
                 <Button 
                   onClick={handleUpload} 
                   className="w-full"
@@ -336,7 +412,7 @@ const Upload = () => {
                 >
                   {isUploading ? (
                     <>
-                      <span className="animate-pulse mr-2">Загрузка...</span>
+                      <span className="mr-2">Загрузка...</span>
                     </>
                   ) : (
                     <>
@@ -345,6 +421,10 @@ const Upload = () => {
                     </>
                   )}
                 </Button>
+                
+                <p className="text-xs text-muted-foreground mt-2">
+                  Фотографии сохраняются локально. Оптимизация размера позволяет сохранить больше фото.
+                </p>
               </div>
             </CardContent>
           </Card>
@@ -353,7 +433,7 @@ const Upload = () => {
         {previews.length > 0 && (
           <div className="mt-4">
             <h3 className="font-medium mb-3">Предварительный просмотр ({previews.length})</h3>
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2">
               {previews.map((preview, index) => (
                 <div key={index} className="relative group">
                   <div className="aspect-square overflow-hidden rounded-lg shadow-sm border">
