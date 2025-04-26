@@ -15,7 +15,7 @@ import {
   CardContent 
 } from "@/components/ui/card";
 import { toast } from "@/components/ui/use-toast";
-import { Upload as UploadIcon, Folder, X, Image, Check, ArrowLeft } from "lucide-react";
+import { Upload as UploadIcon, Folder, X, Image as ImageIcon, Check, ArrowLeft } from "lucide-react";
 import { PhotoProps } from "@/components/PhotoCard";
 
 // Создаем локальное хранилище для фотографий
@@ -116,29 +116,34 @@ const Upload = () => {
   // Функция для оптимизации изображения
   const optimizeImage = (dataUrl: string): Promise<string> => {
     return new Promise((resolve) => {
-      const img = new Image();
-      img.onload = () => {
+      const imgElement = document.createElement('img');
+      imgElement.onload = () => {
         const canvas = document.createElement('canvas');
-        let width = img.width;
-        let height = img.height;
+        let width = imgElement.width;
+        let height = imgElement.height;
         
         // Уменьшаем размер, если превышает максимальный
         if (width > MAX_IMAGE_WIDTH || height > MAX_IMAGE_HEIGHT) {
           const ratio = Math.min(MAX_IMAGE_WIDTH / width, MAX_IMAGE_HEIGHT / height);
-          width *= ratio;
-          height *= ratio;
+          width = Math.floor(width * ratio);
+          height = Math.floor(height * ratio);
         }
         
         canvas.width = width;
         canvas.height = height;
         
         const ctx = canvas.getContext('2d');
-        ctx?.drawImage(img, 0, 0, width, height);
-        
-        // Сжимаем качество изображения
-        resolve(canvas.toDataURL('image/jpeg', 0.7));
+        if (ctx) {
+          ctx.drawImage(imgElement, 0, 0, width, height);
+          
+          // Сжимаем качество изображения
+          resolve(canvas.toDataURL('image/jpeg', 0.7));
+        } else {
+          // Если не удалось получить контекст, возвращаем оригинал
+          resolve(dataUrl);
+        }
       };
-      img.src = dataUrl;
+      imgElement.src = dataUrl;
     });
   };
 
@@ -366,7 +371,7 @@ const Upload = () => {
                     htmlFor="file-upload" 
                     className="flex flex-col items-center justify-center cursor-pointer"
                   >
-                    <Image className="h-10 w-10 text-muted-foreground mb-2" />
+                    <ImageIcon className="h-10 w-10 text-muted-foreground mb-2" />
                     <p className="text-sm text-muted-foreground mb-1">
                       Перетащите файлы сюда или нажмите для выбора
                     </p>
